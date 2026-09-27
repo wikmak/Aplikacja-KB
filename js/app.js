@@ -32,6 +32,8 @@ function setHeader({ title, back = false, action = null }) {
   if (action) { a.innerHTML = action.icon; a.setAttribute('aria-label', action.label); a.onclick = action.run; }
 }
 
+const tabOf = (type) => ({ logs: 'logs', tasks: 'tasks', observations: 'walk' }[type] || 'more');
+
 function setTab(tab) {
   document.querySelectorAll('.tabbar a').forEach((a) => a.classList.toggle('active', a.dataset.tab === tab));
 }
@@ -137,7 +139,10 @@ async function render() {
 
   try {
     if (!route) return await renderHome();
+    if (route === 'walk') return await renderWalk();
+    if (route === 'list' && a === 'observations') return await renderObservations();
     if (route === 'list') return await renderList(a);
+    if (route === 'taskreport') return await renderTaskReport(a);
     if (route === 'edit') return await renderEdit(a, b);
     if (route === 'view') return await renderDetail(a, b);
     if (route === 'more') return renderMore();
@@ -170,9 +175,11 @@ async function renderHome() {
   const p = await currentProject();
   setHeader({ title: 'Pulpit', action: { icon: '📄', label: 'Raport dzienny', run: () => location.hash = '#/report/' + TODAY() } });
   const pid = state.projectId;
-  const [logs, tasks, defects, deliveries, attendance] = await Promise.all(
-    ['logs', 'tasks', 'defects', 'deliveries', 'attendance'].map((s) => DB.byProject(s, pid)));
+  const [logs, tasks, defects, deliveries, attendance, observations] = await Promise.all(
+    ['logs', 'tasks', 'defects', 'deliveries', 'attendance', 'observations'].map((s) => DB.byProject(s, pid)));
   const today = TODAY();
+  const pendingObs = observations.filter((o) => o.status === 'Do rozpatrzenia').length;
+  const todayObs = observations.filter((o) => o.date === today).length;
   const openTasks = tasks.filter((t) => t.status !== 'Zrobione');
   const overdue = openTasks.filter((t) => t.dueDate && t.dueDate < today);
   const openDefects = defects.filter((d) => d.status !== 'Usunięta');
@@ -199,8 +206,8 @@ async function renderHome() {
     <section class="stats">
       <a class="stat" href="#/list/tasks"><b>${openTasks.length}</b><span>otwarte zadania</span></a>
       <a class="stat ${overdue.length ? 'alert' : ''}" href="#/list/tasks"><b>${overdue.length}</b><span>po terminie</span></a>
+      <a class="stat ${pendingObs ? 'warn' : ''}" href="#/list/observations"><b>${pendingObs}</b><span>z obchodu do rozpatrz.</span></a>
       <a class="stat ${openDefects.length ? 'warn' : ''}" href="#/list/defects"><b>${openDefects.length}</b><span>otwarte usterki</span></a>
-      <a class="stat" href="#/list/attendance"><b>${todayWorkers}</b><span>osób dziś</span></a>
     </section>
 
     <section class="card">
@@ -211,11 +218,13 @@ async function renderHome() {
         <span>${todayAtt.length ? '✔' : '○'}</span> Obecność brygad ${todayAtt.length ? `— ${todayAtt.length} firm, ${todayWorkers} os.` : '— brak, dodaj'}</a>
       <a class="todo-row ${todayDeliveries.length ? 'ok' : ''}" href="#/list/deliveries">
         <span>${todayDeliveries.length ? '✔' : '○'}</span> Dostawy: ${todayDeliveries.length}</a>
+      <a class="todo-row ${todayObs ? 'ok' : ''}" href="#/walk">
+        <span>${todayObs ? '✔' : '○'}</span> Obchód: ${todayObs ? `${todayObs} spostrzeżeń` : 'jeszcze nie było'}</a>
     </section>
 
     <section class="quick">
+      <a class="qa" href="#/walk"><span>📷</span>Obchód</a>
       <a class="qa" href="#/edit/logs/new"><span>📓</span>Wpis do dziennika</a>
-      <a class="qa" href="#/edit/defects/new?photo=1"><span>📷</span>Usterka ze zdjęciem</a>
       <a class="qa" href="#/edit/tasks/new"><span>✅</span>Nowe zadanie</a>
       <a class="qa" href="#/edit/deliveries/new"><span>🚚</span>Dostawa</a>
       <a class="qa" href="#/edit/attendance/new"><span>👷</span>Obecność</a>
@@ -242,7 +251,7 @@ function itemHtml(type, x) {
       ${s.line2(x) ? `<small>${esc(s.line2(x))}</small>` : ''}
     </a>
     ${badge ? `<span class="badge ${badge.cls || ''}">${esc(badge.text)}</span>` : ''}
-    ${x._photoCount ? `<span class="pc">📷${x._photoCount}</span>` : ''}
+    ${x._thumb ? `<img class="thumb" src="${x._thumb}" alt="">` : x._photoCount ? `<span class="pc">📷${x._photoCount}</span>` : ''}
   </div>`;
 }
 
@@ -253,7 +262,7 @@ function bindListItems(root) {
     const t = SCHEMA[type].toggle;
     const x = await DB.get(type, id);
     const done = x[t.key] === t.on;
-    x[t.key] = done ? t.off : t.on;
+    x[t.key] = done ? (type === 'tasks' && x.sentAt ? 'Przekazane' : t.off) : t.on;
     if (t.dateKey) x[t.dateKey] = done ? '' : TODAY();
     await DB.put(type, x);
     toast(done ? 'Przywrócono' : 'Oznaczono jako wykonane');
@@ -264,13 +273,24 @@ function bindListItems(root) {
 async function renderList(type) {
   const s = SCHEMA[type];
   if (!s || type === 'projects') return renderProjects();
-  setTab(['logs', 'tasks', 'defects'].includes(type) ? type : 'more');
-  setHeader({ title: s.title, back: !['logs', 'tasks', 'defects'].includes(type), action: { icon: '＋', label: 'Dodaj', run: () => location.hash = `#/edit/${type}/new` } });
+  setTab(tabOf(type));
+  setHeader({ title: s.title, back: tabOf(type) === 'more', action: { icon: '＋', label: 'Dodaj', run: () => location.hash = `#/edit/${type}/new` } });
   let items = await (s.global ? DB.byProject(type, '*') : DB.byProject(type, state.projectId));
   const photos = await DB.all('photos');
   const counts = {};
   photos.forEach((p) => counts[p.ownerId] = (counts[p.ownerId] || 0) + 1);
   items.forEach((x) => x._photoCount = counts[x.id] || 0);
+  if (type === 'tasks' || type === 'defects') {
+    const first = {};
+    photos.forEach((p) => { if (!first[p.ownerId]) first[p.ownerId] = p.blob; });
+    items.forEach((x) => { if (first[x.id]) x._thumb = blobUrl(first[x.id]); });
+  }
+  let people = [];
+  if (type === 'tasks') {
+    people = [...new Set(items.map((x) => x.assignee).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pl'));
+    if (state.assignee && !people.includes(state.assignee)) state.assignee = '';
+    if (state.assignee) items = items.filter((x) => x.assignee === state.assignee);
+  }
 
   const filter = state.filters[type] || (s.filters ? s.filters[0] : null);
   const q = (state.query[type] || '').toLowerCase();
@@ -297,6 +317,10 @@ async function renderList(type) {
     <div class="toolbar">
       <input type="search" class="search" placeholder="Szukaj…" value="${esc(state.query[type] || '')}">
       ${s.filters ? `<div class="seg">${s.filters.map((f) => `<button class="${f === filter ? 'on' : ''}" data-f="${esc(f)}">${esc(f)} ${f === filter ? `(${shown.length})` : ''}</button>`).join('')}</div>` : ''}
+      ${type === 'tasks' ? `<div class="inline">
+        <select id="who"><option value="">👤 Wszyscy odpowiedzialni</option>${people.map((w) => `<option ${w === state.assignee ? 'selected' : ''}>${esc(w)}</option>`).join('')}</select>
+        <a class="btn ghost small" href="#/taskreport/${encodeURIComponent(state.assignee || '*')}">🖨 Zestawienie</a>
+      </div>` : ''}
     </div>
     ${shown.length ? body : `<div class="empty"><div>${s.icon}</div><p>Brak pozycji.</p><a class="btn" href="#/edit/${type}/new">+ Dodaj ${esc(s.one)}</a></div>`}
     <a class="fab" href="#/edit/${type}/new" aria-label="Dodaj">＋</a>`;
@@ -304,6 +328,8 @@ async function renderList(type) {
   const search = $('.search');
   search.oninput = () => { state.query[type] = search.value; clearTimeout(search.t); search.t = setTimeout(async () => { await renderList(type); const s2 = $('.search'); s2.focus(); s2.setSelectionRange(s2.value.length, s2.value.length); }, 250); };
   document.querySelectorAll('.seg [data-f]').forEach((b) => b.onclick = () => { state.filters[type] = b.dataset.f; renderList(type); });
+  const who = $('#who');
+  if (who) who.onchange = () => { state.assignee = who.value; renderList(type); };
   bindListItems($('#view'));
 }
 
@@ -323,11 +349,12 @@ async function renderDetail(type, id) {
   const s = SCHEMA[type];
   const x = await DB.get(type, id);
   if (!x) { location.hash = '#/list/' + type; return; }
-  setTab(['logs', 'tasks', 'defects'].includes(type) ? type : 'more');
+  setTab(tabOf(type));
   setHeader({ title: s.title, back: true, action: { icon: '✎', label: 'Edytuj', run: () => location.hash = `#/edit/${type}/${id}` } });
   const photos = await DB.byOwner(id);
+  const more = await detailExtras(type, x);
 
-  const rows = s.fields.filter((f) => f.type !== 'photos').map((f) => {
+  const rows = s.fields.filter((f) => f.type !== 'photos' && !(more && more.hideKeys && more.hideKeys.includes(f.key))).map((f) => {
     let v = x[f.key];
     if (f.type === 'checkbox') v = v ? 'Tak' : 'Nie';
     else if (v === undefined || v === null || v === '') return '';
@@ -353,8 +380,10 @@ async function renderDetail(type, id) {
   $('#view').innerHTML = `
     <div class="card detail">
       ${s.badge && s.badge(x) ? `<span class="badge ${s.badge(x).cls || ''}">${esc(s.badge(x).text)}</span>` : ''}
-      ${rows}
+      ${type === 'observations' ? '' : rows}
       ${photos.length ? `<div class="field-view"><label>Zdjęcia (${photos.length})</label><div class="photos">${photos.map((p) => `<img src="${blobUrl(p.blob)}" alt="">`).join('')}</div></div>` : ''}
+      ${type === 'observations' ? rows : ''}
+      ${more ? more.html : ''}
       ${extra}
       <div class="meta muted">Utworzono: ${new Date(x.createdAt).toLocaleString('pl-PL')}${x.updatedAt !== x.createdAt ? ' · zmieniono: ' + new Date(x.updatedAt).toLocaleString('pl-PL') : ''}</div>
     </div>
@@ -364,6 +393,7 @@ async function renderDetail(type, id) {
     </div>`;
 
   document.querySelectorAll('.photos img').forEach((img) => img.onclick = () => showPhoto(img.src));
+  if (more) more.bind();
   $('#del').onclick = async () => {
     if (!(await confirmDialog(type === 'projects' ? 'Usunąć budowę wraz ze WSZYSTKIMI jej danymi?' : `Usunąć ${s.one}?`))) return;
     if (type === 'projects') { await DB.removeProject(id); state.projectId = null; } else await DB.remove(type, id);
@@ -374,6 +404,7 @@ async function renderDetail(type, id) {
     const copy = { ...x }; delete copy.id; delete copy.createdAt;
     s.fields.forEach((f) => { if (f.default && f.type === 'date') copy[f.key] = f.default(); });
     if (s.toggle) { copy[s.toggle.key] = s.toggle.off; if (s.toggle.dateKey) copy[s.toggle.dateKey] = ''; }
+    delete copy.sentAt; delete copy.sourceObs; delete copy.taskId;
     const saved = await DB.put(type, copy);
     toast('Skopiowano (bez zdjęć)'); location.hash = `#/edit/${type}/${saved.id}`;
   };
@@ -385,8 +416,9 @@ async function renderDetail(type, id) {
 
 /* ---------- Formularz ---------- */
 async function datalistOptions(name) {
-  if (name !== 'companies') return DATALISTS[name] || [];
+  if (name !== 'companies' && name !== 'people') return DATALISTS[name] || [];
   const set = new Set();
+  if (name === 'people') for (const c of await DB.byProject('contacts', '*')) c.name && set.add(c.name);
   for (const st of ['contacts', 'attendance', 'deliveries', 'defects', 'tasks']) {
     for (const x of await DB.all(st)) ['company', 'supplier', 'responsible', 'assignee'].forEach((k) => x[k] && set.add(x[k]));
   }
@@ -403,9 +435,11 @@ async function renderEdit(type, idWithQuery) {
   if (isNew) s.fields.forEach((f) => { if (f.default !== undefined) x[f.key] = typeof f.default === 'function' ? f.default() : f.default; });
   state.pendingPhotos = []; state.removedPhotos = [];
   const existingPhotos = isNew ? [] : await DB.byOwner(id);
+  const fromObs = type === 'tasks' && isNew && qs && /from=([^&]+)/.exec(qs);
+  if (fromObs) state.pendingPhotos = await prefillTaskFromObservations(x, fromObs[1].split(','));
 
-  setTab(['logs', 'tasks', 'defects'].includes(type) ? type : type === 'projects' ? 'home' : 'more');
-  setHeader({ title: (isNew ? 'Nowy: ' : 'Edycja: ') + s.one, back: true });
+  setTab(type === 'projects' ? 'home' : tabOf(type));
+  setHeader({ title: fromObs ? 'Zadanie z obchodu' : (isNew ? 'Nowy: ' : 'Edycja: ') + s.one, back: true });
 
   const lists = [...new Set(s.fields.map((f) => f.list).filter(Boolean))];
   const listHtml = (await Promise.all(lists.map(async (l) => `<datalist id="dl-${l}">${(await datalistOptions(l)).map((o) => `<option value="${esc(o)}">`).join('')}</datalist>`))).join('');
@@ -488,7 +522,13 @@ async function renderEdit(type, idWithQuery) {
     if (!s.global && type !== 'projects') x.projectId = state.projectId;
     if (s.global) x.projectId = '*';
     if (s.toggle && s.toggle.dateKey && x[s.toggle.key] === s.toggle.on && !x[s.toggle.dateKey]) x[s.toggle.dateKey] = TODAY();
+    if (type === 'tasks') {
+      if (x.status === 'Zrobione' && !x.doneAt) x.doneAt = TODAY();
+      if (x.status !== 'Zrobione') x.doneAt = '';
+      if (x.status === 'Przekazane' && !x.sentAt) x.sentAt = TODAY();
+    }
     const saved = await DB.put(type, x);
+    if (fromObs) await linkObservationsToTask(saved);
     for (const pid of state.removedPhotos) await DB.remove('photos', pid);
     for (const blob of state.pendingPhotos) await DB.put('photos', { ownerId: saved.id, projectId: x.projectId || saved.id, blob });
     state.pendingPhotos = []; state.removedPhotos = [];
@@ -534,6 +574,8 @@ function renderMore() {
   const tile = (href, icon, label, desc) => `<a class="menu-item" href="${href}"><span class="mi">${icon}</span><span><b>${label}</b><small>${desc}</small></span><span class="chev">›</span></a>`;
   $('#view').innerHTML = `
     <div class="menu">
+      ${tile('#/list/observations', '📷', 'Spostrzeżenia z obchodu', 'Rozpatrywanie zdjęć, dokumentacja elementów zakrywanych')}
+      ${tile('#/list/defects', '⚠️', 'Usterki', 'Rejestr usterek i ich usuwania')}
       ${tile('#/list/attendance', '👷', 'Obecność brygad', 'Firmy, liczba osób, roboczogodziny')}
       ${tile('#/list/deliveries', '🚚', 'Dostawy materiałów', 'Przyjęcia, WZ, zdjęcia dokumentów')}
       ${tile('#/list/notes', '📝', 'Notatki i ustalenia', 'Narady, ustalenia, polecenia')}
@@ -561,7 +603,7 @@ async function renderReport(date) {
   const del = deliveries.filter((x) => x.date === date).sort(SCHEMA.deliveries.sort).reverse();
   const newDefects = defects.filter((d) => d.reportedAt === date);
   const fixedDefects = defects.filter((d) => d.fixedAt === date);
-  const doneTasks = tasks.filter((t) => t.status === 'Zrobione' && (t.updatedAt || '').slice(0, 10) === date);
+  const doneTasks = tasks.filter((t) => t.status === 'Zrobione' && (t.doneAt || (t.updatedAt || '').slice(0, 10)) === date);
   const dayNotes = notes.filter((n) => n.date === date);
   const totalW = att.reduce((s, x) => s + (Number(x.workers) || 0), 0);
   const totalH = att.reduce((s, x) => s + (Number(x.workers) || 0) * (Number(x.hours) || 0), 0);
@@ -578,7 +620,7 @@ async function renderReport(date) {
       <header>
         <h2>Raport dzienny z budowy</h2>
         <div><b>${esc(p.name)}</b>${p.address ? ' — ' + esc(p.address) : ''}</div>
-        <div>${esc(fmtDate(date, true))}</div>
+        <div class="cap">${esc(fmtDate(date, true))}</div>
         ${p.investor ? `<div class="muted">Inwestor: ${esc(p.investor)}</div>` : ''}
       </header>
       ${dayLogs.map((l) => `

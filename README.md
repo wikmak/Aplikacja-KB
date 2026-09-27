@@ -8,10 +8,14 @@ a wszystkie dane (także zdjęcia) są zapisywane **lokalnie na telefonie**.
 
 - **Pulpit** — dzień budowy, dni do końca, otwarte zadania, zadania po terminie, otwarte usterki,
   liczba osób na budowie dziś, lista kontrolna dnia (dziennik / obecność / dostawy), szybkie akcje.
+- **Obchód** — szybkie zdjęcia w terenie z krótkim opisem, rodzajem (uwaga, zastrzeżenie, element zakrywany,
+  dostawa, BHP) i lokalizacją. W biurze: lista „do rozpatrzenia”, zaznaczenie kilku zdjęć → jedno zadanie
+  dla osoby odpowiedzialnej (zdjęcia przechodzą do zadania) albo odłożenie do dokumentacji.
 - **Dziennik budowy** — wpisy dzienne: pogoda (przycisk *Pobierz* uzupełnia pogodę z GPS),
   temperatura, liczba pracowników, wykonane roboty, sprzęt, kontrole i wizyty, problemy, plan na jutro, zdjęcia.
-- **Zadania** — priorytet, termin, odpowiedzialny, status; odhaczanie jednym dotknięciem,
-  oznaczenie „po terminie” i „dziś”.
+- **Zadania** — odpowiedzialny, priorytet, statusy (do zrobienia / przekazane / w toku / zrobione),
+  daty zgłoszenia, przekazania, terminu i realizacji z licznikiem dni po terminie; wysyłka zadania
+  ze zdjęciami do odpowiedzialnego (WhatsApp, SMS, e-mail); filtr po odpowiedzialnym i zestawienie do PDF.
 - **Usterki** — lokalizacja, wykonawca odpowiedzialny, termin usunięcia, zdjęcia;
   z pulpitu „Usterka ze zdjęciem” od razu otwiera aparat.
 - **Dostawy materiałów** — materiał, ilość, dostawca, nr WZ, przyjęcie z zastrzeżeniami, zdjęcia dokumentów.
@@ -59,5 +63,6 @@ python3 -m http.server 8000
 | `js/db.js` | zapis danych w IndexedDB |
 | `js/schema.js` | definicje modułów i pól formularzy — tu najłatwiej dodać nowe pole |
 | `js/app.js` | widoki, formularze, zdjęcia, raport, kopia zapasowa |
+| `js/walk.js` | obchód, rozpatrywanie spostrzeżeń, wysyłka i zestawienie zadań |
 | `sw.js` | praca offline (po zmianie plików podbij wersję `CACHE`) |
 | `manifest.webmanifest`, `icons/` | instalacja jako aplikacja |
