@@ -1,7 +1,7 @@
 /* Service worker — aplikacja działa bez internetu. Po zmianie plików podbij wersję. */
-const CACHE = 'kb-v1';
+const CACHE = 'kb-v2';
 const FILES = [
-  './', 'index.html', 'css/styles.css', 'js/db.js', 'js/schema.js', 'js/app.js',
+  './', 'index.html', 'css/styles.css', 'js/db.js', 'js/schema.js', 'js/walk.js', 'js/app.js',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'
 ];
 

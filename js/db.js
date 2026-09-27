@@ -1,8 +1,8 @@
 /* Prosta warstwa nad IndexedDB. Wszystkie dane zostają na urządzeniu. */
 const DB = (() => {
   const NAME = 'kierownik-budowy';
-  const VERSION = 1;
-  const STORES = ['projects', 'logs', 'tasks', 'defects', 'deliveries', 'attendance', 'contacts', 'notes', 'photos'];
+  const VERSION = 2;
+  const STORES = ['projects', 'logs', 'tasks', 'defects', 'deliveries', 'attendance', 'contacts', 'notes', 'observations', 'photos'];
   let dbPromise;
 
   function open() {

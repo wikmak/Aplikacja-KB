@@ -16,6 +16,7 @@
     { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
   ],
   "shortcuts": [
+    { "name": "Obchód", "url": "./#/walk" },
     { "name": "Wpis do dziennika", "url": "./#/edit/logs/new" },
     { "name": "Usterka ze zdjęciem", "url": "./#/edit/defects/new?photo=1" },
     { "name": "Raport dzienny", "url": "./#/report/" }

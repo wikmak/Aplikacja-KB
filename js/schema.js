@@ -5,6 +5,11 @@ const TODAY = () => {
 };
 const NOW_TIME = () => new Date().toTimeString().slice(0, 5);
 
+const TASK_STATUSES = ['Do zrobienia', 'Przekazane', 'W toku', 'Zrobione'];
+const OBS_CATEGORIES = ['Uwaga', 'Zastrzeżenie', 'Element zakrywany', 'Dostawa', 'BHP', 'Informacja'];
+const OBS_CLS = { 'Uwaga': 'amber', 'Zastrzeżenie': 'red', 'BHP': 'red', 'Element zakrywany': 'blue', 'Dostawa': '', 'Informacja': '' };
+const OBS_STATUSES = ['Do rozpatrzenia', 'Zadanie utworzone', 'Dokumentacja'];
+
 const SCHEMA = {
   projects: {
     title: 'Budowy',
@@ -54,10 +59,14 @@ const SCHEMA = {
     icon: '✅',
     fields: [
       { key: 'title', label: 'Zadanie', type: 'text', required: true },
-      { key: 'status', label: 'Status', type: 'select', options: ['Do zrobienia', 'W toku', 'Zrobione'], default: 'Do zrobienia', half: true },
+      { key: 'assignee', label: 'Odpowiedzialny (osoba / firma)', type: 'text', list: 'people' },
+      { key: 'status', label: 'Status', type: 'select', options: TASK_STATUSES, default: 'Do zrobienia', half: true },
       { key: 'priority', label: 'Priorytet', type: 'select', options: ['Niski', 'Normalny', 'Wysoki', 'Pilny'], default: 'Normalny', half: true },
-      { key: 'dueDate', label: 'Termin', type: 'date', half: true },
-      { key: 'assignee', label: 'Odpowiedzialny', type: 'text', half: true, list: 'companies' },
+      { key: 'reportedAt', label: 'Data zgłoszenia', type: 'date', default: TODAY, half: true },
+      { key: 'dueDate', label: 'Termin realizacji', type: 'date', half: true },
+      { key: 'sentAt', label: 'Data przekazania', type: 'date', half: true },
+      { key: 'doneAt', label: 'Data realizacji', type: 'date', half: true },
+      { key: 'location', label: 'Lokalizacja', type: 'text' },
       { key: 'description', label: 'Opis', type: 'textarea' },
       { key: 'photos', label: 'Zdjęcia', type: 'photos' }
     ],
@@ -67,8 +76,30 @@ const SCHEMA = {
     line1: (x) => x.title,
     line2: (x) => [x.assignee, x.dueDate && ('termin ' + fmtDate(x.dueDate))].filter(Boolean).join(' · '),
     badge: (x) => statusBadge(x.status === 'Zrobione', x.dueDate, x.status),
-    toggle: { key: 'status', on: 'Zrobione', off: 'Do zrobienia' },
-    search: ['title', 'description', 'assignee']
+    toggle: { key: 'status', on: 'Zrobione', off: 'Do zrobienia', dateKey: 'doneAt' },
+    search: ['title', 'description', 'assignee', 'location']
+  },
+
+  observations: {
+    title: 'Obchód — spostrzeżenia',
+    one: 'spostrzeżenie',
+    icon: '📷',
+    fields: [
+      { key: 'photos', label: 'Zdjęcia', type: 'photos' },
+      { key: 'description', label: 'Opis', type: 'textarea', rows: 3, placeholder: 'Co widać na zdjęciu, co jest nie tak…' },
+      { key: 'category', label: 'Rodzaj', type: 'select', options: OBS_CATEGORIES, default: 'Uwaga' },
+      { key: 'location', label: 'Lokalizacja', type: 'text', placeholder: 'np. II piętro, oś B/3' },
+      { key: 'date', label: 'Data', type: 'date', default: TODAY, half: true },
+      { key: 'time', label: 'Godzina', type: 'time', default: NOW_TIME, half: true },
+      { key: 'status', label: 'Status', type: 'select', options: OBS_STATUSES, default: 'Do rozpatrzenia' }
+    ],
+    filters: ['Do rozpatrzenia', 'Przekazane', 'Dokumentacja', 'Wszystkie'],
+    filter: (x, f) => f === 'Wszystkie' ? true : f === 'Przekazane' ? x.status === 'Zadanie utworzone' : x.status === f,
+    sort: (a, b) => ((b.date || '') + (b.time || '')).localeCompare((a.date || '') + (a.time || '')),
+    line1: (x) => x.description || '(bez opisu)',
+    line2: (x) => [x.time, x.location, x.category].filter(Boolean).join(' · '),
+    badge: (x) => x.status === 'Zadanie utworzone' ? { text: 'Zadanie', cls: 'green' } : x.status === 'Dokumentacja' ? { text: 'Dokumentacja', cls: 'blue' } : { text: x.category || 'Uwaga', cls: OBS_CLS[x.category] || 'amber' },
+    search: ['description', 'location', 'category']
   },
 
   defects: {
@@ -185,7 +216,7 @@ function statusBadge(done, due, status) {
   if (done) return { text: status, cls: 'green' };
   if (due && due < TODAY()) return { text: 'Po terminie', cls: 'red' };
   if (due && due === TODAY()) return { text: 'Dziś', cls: 'amber' };
-  return { text: status, cls: status === 'W toku' || status === 'W naprawie' ? 'blue' : '' };
+  return { text: status, cls: status === 'W toku' || status === 'W naprawie' || status === 'Przekazane' ? 'blue' : '' };
 }
 
 function fmtDate(iso, withDay) {
