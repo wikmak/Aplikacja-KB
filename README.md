@@ -66,3 +66,24 @@ python3 -m http.server 8000
 | `js/walk.js` | obchód, rozpatrywanie spostrzeżeń, wysyłka i zestawienie zadań |
 | `sw.js` | praca offline (po zmianie plików podbij wersję `CACHE`) |
 | `manifest.webmanifest`, `icons/` | instalacja jako aplikacja |
+
+---
+
+# Wesele — koszty (`wesele/`)
+
+Osobna aplikacja na telefon do pilnowania kosztów przygotowania wesela. Działa tak samo jak
+aplikacja powyżej: instaluje się z Safari na ekranie głównym iPhone'a, działa bez internetu,
+a dane zostają na telefonie.
+
+- **Pozycje**: własna nazwa (np. sala, zespół, fotograf), **zaliczka**, **kwota całkowita**,
+  **kwota wpłacona do tej pory** i ile zostało do zapłaty, do tego pasek postępu i informacja,
+  czy zaliczka jest już opłacona.
+- **Wpłaty** do każdej pozycji: kto wpłacił (**Wiktor** / **Natalia**), kwota, data i opis;
+  przy każdej pozycji widać, ile wpłacił każde z was.
+- **Stałe podsumowanie na dole ekranu**: liczba wpłat, łączna kwota całkowita, ile wpłacono,
+  ile wpłacił Wiktor, ile Natalia i ile jeszcze zostało.
+- Filtry *Wszystkie / Do zapłaty / Opłacone*, kopia zapasowa do pliku i przywracanie,
+  udostępnianie podsumowania tekstem.
+
+Adres po publikacji: `https://<twoja-nazwa>.github.io/<repozytorium>/wesele/`.
+Na iPhonie otwórz go w Safari, a potem *Udostępnij* → *Do ekranu początkowego*.
